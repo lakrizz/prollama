@@ -1,0 +1,39 @@
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Output of build process
+*.out
+*.a
+
+# Test binary
+*.test
+
+# Dependency directories (commonly added when vendoring dependencies)
+vendor/
+
+# Go specific
+*.log
+*.tmp
+
+# Go modules
+go.sum
+go.mod
+
+# Vim swap, backup, and undo files
+*.swp
+*.swo
+*.swn
+*.un~
+*.tmp
+*.bak
+
+# Editor and IDE files
+.idea/
+.vscode/
+
+# OS generated files
+.DS_Store
+Thumbs.db
