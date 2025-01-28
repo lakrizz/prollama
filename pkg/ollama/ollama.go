@@ -2,27 +2,32 @@ package ollama
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log"
-	"os"
-	"path/filepath"
-	"regexp"
+	"log/slog"
+	"os/exec"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/jonathanhecl/gollama"
-	"github.com/k0kubun/pp"
-	"github.com/sourcegraph/go-diff/diff"
 
-	"github.com/lakrizz/prollama/pkg/models"
+	"github.com/lakrizz/prollama/config"
+	"github.com/lakrizz/prollama/pkg/slicex"
 )
 
-var Model = "qwen2.5-coder:14b"
+type Ollama struct {
+	userPrompt        string
+	systemPrompt      string
+	gollama           *gollama.Gollama
+	ctx               context.Context
+	cfg               *config.Config
+	autoselectedModel bool
+}
 
-const (
-	gptPrompt = `
+type OllamaOption func(*Ollama) error
+
+func New(opts ...OllamaOption) (*Ollama, error) {
+	o := &Ollama{
+		userPrompt: `
 	Please review the following unified Diff file. Identify issues such as syntax errors, logical flaws, unhandled errors, code smells, and testing gaps. Suggest improvements, refactoring opportunities, or missing tests where applicable. Inform about State of the Art implementations, Best Practices and Design Patterns. Combine multiple findings for the same line into a single comment. 
 
 Return all feedback as an array of JSON objects, where each object contains the fields:  
@@ -35,113 +40,130 @@ If no issues are found, return an empty array ('[]').
 Ignore metadata lines that indicate information for the Diffpatch (e.g., lines that contain four numbers).
 Assume all brackets, quotes, parantheses are closed at some point, so do not mark a missing closing or an unclosed pair as an error. 
 
-This is the patch: %v`
+This is the patch: %v`,
+		gollama: gollama.New(""),
+	}
 
-	systemPrompt = "You are a principal software engineer with extensive experience in performing detailed code reviews, adhering to best practices, and ensuring code quality in production systems. Your role is to critically analyze Git patch files, identifying issues such as syntax errors, logical flaws, unhandled errors, code smells, and testing gaps. Provide actionable, well-reasoned feedback in JSON format with references to file names and line numbers, scoped strictly to the context of the patch. Focus on clarity, correctness, and optimization, ensuring that your feedback is concise, relevant, and insightful. Do not comment on correct or acceptable code."
-)
+	for _, opt := range opts {
+		opt(o)
+	}
 
-func GetCommentsForPatch(diffs []*diff.FileDiff) ([]*models.Comment, error) {
-	logFolder := filepath.Join("logs", fmt.Sprintf("%v", time.Now().Unix()))
-	ctx := context.Background()
-
-	res := make([]*models.Comment, 0)
-	g := gollama.New(Model)
-	g.ContextLength = 32768
-	g.SystemPrompt = systemPrompt
-
-	for _, unidiff := range diffs {
-		if !checkFilenameAllowed(unidiff.NewName) {
-			continue
+	// extract config from context
+	if o.ctx != nil {
+		cfg, ok := config.FromContext(o.ctx)
+		if !ok {
+			return nil, fmt.Errorf("could not get config from context")
 		}
 
-		log.Println("checking new diff", unidiff.NewName)
-
-		// now check all the hunks
-		for i, hunk := range unidiff.Hunks {
-			log.Println("checking hunk", i+1, "of", len(unidiff.Hunks))
-			output, err := g.Chat(ctx, fmt.Sprintf(gptPrompt, string(hunk.Body)))
-			if err != nil {
-				return nil, err
-			}
-			// convert to our struct
-			cmt := []*models.Comment{}
-			err = json.Unmarshal(removeJSONTag(output.Content), &cmt)
-			if err != nil {
-				log.Println(fmt.Errorf("error unmarshalling ollama response: %w", err))
-				pp.Println(removeJSONTag(output.Content))
-				err = os.WriteFile(filepath.Join(logFolder, fmt.Sprintf("F%vH%v", filepath.Base(unidiff.NewName), i)), []byte(output.Content), 0777)
-				if err != nil {
-					log.Println(err)
-				}
-				continue
-			}
-
-			// now fix all the lines etc
-			for _, c := range cmt {
-				affectedLineNumber := findLineNumberInHunk(c.AffectedLine, string(hunk.Body))
-				if affectedLineNumber == -1 {
-					continue
-				}
-
-				c.FileName = unidiff.NewName[2:]
-				c.EndLine = int(hunk.NewStartLine) + affectedLineNumber
-			}
-
-			log.Println("adding", len(cmt), "new comments")
-			res = append(res, cmt...)
+		if cfg != nil {
+			o.cfg = cfg
 		}
 	}
 
-	log.Println("found", len(res), "comments for this patch")
-	return res, nil
+	// some fallback mechanisms for properties
+	if o.cfg.Model == "" || !o.ValidModel() {
+		err := o.AutoSelectModel()
+		if err != nil {
+			return nil, fmt.Errorf("could not select any model")
+		}
+	}
+
+	// check if everything actually works and is valid
+	if err := o.Validate(); err != nil {
+		return nil, err
+	}
+
+	return o, nil
 }
 
-// checkFilenameAllowed checks if the given filename is allowed based on specific rules.
-//
-// The function returns false if the filename has a blocked extension or contains any
-// of the blocked partial strings. Otherwise, it returns true.
-func checkFilenameAllowed(filename string) bool {
-	blockedExtensions := []string{".yaml", ".toml", ".xml", ".json", ""}
-	blockedPartials := []string{".min.", ".gen.", ".d."}
+func (o *Ollama) Validate() error {
+	// add check if ollama cmd is available
+	_, err := exec.LookPath("ollama")
+	if err != nil {
+		return fmt.Errorf("could not find ollama path: %w", err)
+	}
 
-	ext := filepath.Ext(filename)
-	if slices.Contains(blockedExtensions, ext) {
+	return nil
+}
+
+func (o *Ollama) GetModels() ([]string, error) {
+	models, err := o.gollama.ListModels(o.ctx)
+	if err != nil {
+		return nil, fmt.Errorf("could not list models: %w", err)
+	}
+
+	if len(models) == 0 {
+		return nil, fmt.Errorf("no models found")
+	}
+
+	return slicex.ConvertSlice(models, func(e gollama.ModelInfo) string { return e.Model }), nil
+}
+
+func (o *Ollama) ValidModel() bool {
+	models, err := o.GetModels()
+	if err != nil {
 		return false
 	}
 
-	if slices.ContainsFunc(blockedPartials, func(s string) bool {
-		return strings.Contains(filename, s)
-	}) {
-		return false
+	return slices.Contains(models, o.cfg.Model)
+}
+
+func (o *Ollama) AutoSelectModel() error {
+	if o.cfg.Debug {
+		slog.Debug("given model not found, auto selecting model", "given_model", o.cfg.Model)
 	}
 
-	return true
-}
-func removeJSONTag(input string) []byte {
-	j := strings.TrimPrefix(input, "```json")
-	return []byte(strings.TrimSuffix(j, "```"))
-}
+	prioList := []string{
+		"qwen2.5-coder",
+		"starcoder2",
+		"deepseek-coder-v2",
+		"deepseek-coder",
+		"starcoder",
+		"sqlcoder",
+		"dolphincoder",
+		"yi-coder",
+		"opencoder",
+		"deepseek-v2.5",
+		"codellama",
+		"dolphin-mixtral",
+		"codegemma",
+		"codestral",
+		"codegeex4",
+		"codeqwen",
+		"mistral-large",
+		"codeup",
+		"codebooga",
+		"tulu3",
+		"coder",
+		"code",
+	}
 
-// findLineNumberInHunk searches for the line number of a specific line (needle) within a block of text (haystack).
-// It splits the haystack into lines and compares each line with the needle, ignoring control characters.
-// If a match is found, it returns the line number (0-based index). If no match is found, it returns -1.
-func findLineNumberInHunk(needle string, haystack string) int {
-	hs := strings.Split(haystack, "\n")
-	for i, line := range hs {
-		if compareIgnoringControlChars(line, needle) {
-			return i - 1
+	models, err := o.GetModels()
+	if err != nil {
+		return fmt.Errorf("could not get ollama models", err)
+	}
+
+	if len(models) == 0 {
+		return fmt.Errorf("no models in ollama found")
+	}
+
+	for _, prio := range prioList {
+		for _, m := range models {
+			if strings.Contains(m, prio) {
+				if o.cfg.Debug {
+					slog.Debug("autoselected model", "model", m)
+				}
+
+				o.autoselectedModel = true
+				o.cfg.Model = m
+				return nil
+			}
 		}
 	}
-	return -1
-}
 
-// compareIgnoringControlChars compares two strings for equality while ignoring ASCII control characters and the DEL character.
-// It uses a regular expression to remove these non-printable characters from both input strings before performing the comparison.
-func compareIgnoringControlChars(first, second string) bool {
-	// This regular expression matches any byte with a value from 0 to 31 (inclusive) or 127.
-	// These bytes are part of the ASCII control characters and the DEL character, which are not printable characters.
-	re := regexp.MustCompile(`[\x00-\x1F\x7F]`)
-	normalizedStr1 := re.ReplaceAllString(first, "")
-	normalizedStr2 := re.ReplaceAllString(second, "")
-	return normalizedStr1 == normalizedStr2
+	// still nothing? select the first available model
+	slog.Debug("autoselected model", "model", models[0])
+	o.autoselectedModel = true
+	o.cfg.Model = models[0]
+	return nil
 }
