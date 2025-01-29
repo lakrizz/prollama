@@ -5,8 +5,8 @@ import (
 	"github.com/lakrizz/prollama/pkg/models"
 )
 
-func AddCommentsToPR(repo string, prNumber int, comments []*models.Comment) error {
-	err := gh.AddReview(repo, prNumber, comments)
+func (s *Service) AddCommentsToPR(prNumber int, comments []*models.Comment) error {
+	err := gh.AddReview(s.Config.Repo, prNumber, comments)
 	if err != nil {
 		return err
 	}

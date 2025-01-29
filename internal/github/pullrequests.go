@@ -3,7 +3,7 @@ package github
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/lakrizz/prollama/pkg/gh"
 )
@@ -22,8 +22,8 @@ type PullRequest struct {
 	Changes string `json:"-"`
 }
 
-func GetPullRequestsByRepositoryName(repo string) ([]*PullRequest, error) {
-	dat, err := gh.GetPullRequests(repo)
+func (s *Service) GetPullRequests() ([]*PullRequest, error) {
+	dat, err := gh.GetPullRequests(s.Config.Repo)
 	if err != nil {
 		return nil, fmt.Errorf("error getting pull requests: %w", err)
 	}
@@ -35,12 +35,18 @@ func GetPullRequestsByRepositoryName(repo string) ([]*PullRequest, error) {
 	}
 
 	for _, req := range pr {
-		req.Repo = repo
+		req.Repo = s.Config.Repo
 		err := req.getDiffs()
 		if err != nil {
-			log.Println(err)
+			if s.Config.Debug {
+				slog.Debug("error getting diff, not aborting!", "error", err.Error())
+			}
 			continue
 		}
+	}
+
+	if s.Config.Debug {
+		slog.Debug("pull requests", "amount", len(pr))
 	}
 
 	return pr, nil
@@ -53,6 +59,5 @@ func (pr *PullRequest) getDiffs() error {
 	}
 
 	pr.Changes = string(dat)
-
 	return nil
 }

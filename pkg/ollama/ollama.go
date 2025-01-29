@@ -140,7 +140,7 @@ func (o *Ollama) AutoSelectModel() error {
 
 	models, err := o.GetModels()
 	if err != nil {
-		return fmt.Errorf("could not get ollama models", err)
+		return fmt.Errorf("could not get ollama models: %w", err)
 	}
 
 	if len(models) == 0 {

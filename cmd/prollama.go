@@ -2,7 +2,8 @@ package cmd
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 
 	"github.com/lakrizz/prollama/internal/github"
 	"github.com/lakrizz/prollama/pkg/hunks"
@@ -15,14 +16,24 @@ func Prollama(ctx context.Context) error {
 		return err
 	}
 
-	repo := "lakrizz/hooks"
-	pullRequests, err := github.GetPullRequestsByRepositoryName(repo)
+	gh, err := github.New(github.WithContext(ctx))
 	if err != nil {
-		panic(err)
+		return err
+	}
+
+	pullRequests, err := gh.GetPullRequests()
+	if err != nil {
+		return err
+	}
+
+	if len(pullRequests) == 0 {
+		slog.Info("No Pull Requests found")
+		return nil
 	}
 
 	for _, pr := range pullRequests {
-		log.Println("now reviewing pr", pr.Title)
+		slog.Info(fmt.Sprintf("Reviewing PR '%v'", pr.Title), "id", pr.Number)
+
 		diffs, err := hunks.Parse(pr.Changes)
 		if err != nil {
 			panic(err)
@@ -33,7 +44,7 @@ func Prollama(ctx context.Context) error {
 			panic(err)
 		}
 
-		err = github.AddCommentsToPR(repo, pr.Number, comments)
+		err = gh.AddCommentsToPR(pr.Number, comments)
 		if err != nil {
 			return err
 		}

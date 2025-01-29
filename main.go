@@ -20,7 +20,7 @@ func main() {
 		Repo:     "",
 		Endpoint: "http://localhost:11434",
 		Debug:    false,
-		Timeout:  5,
+		Timeout:  30,
 	}
 
 	app := &cli.App{
@@ -30,7 +30,7 @@ func main() {
 			&cli.StringFlag{
 				Name:        "model",
 				Value:       "",
-				Usage:       "The Ollama model to use. If left blank, we will auto-detect any code-related model.",
+				Usage:       "The Ollama model to use. If left blank, we will try to auto-detect a well fitting model.",
 				Destination: &cfg.Model,
 			},
 			&cli.StringFlag{
@@ -46,7 +46,7 @@ func main() {
 				Destination: &cfg.Endpoint,
 			},
 			&cli.BoolFlag{
-				Name:        "debug,d",
+				Name:        "debug",
 				Value:       cfg.Debug,
 				Usage:       "Enable debug output.",
 				Destination: &cfg.Debug,
@@ -64,7 +64,7 @@ func main() {
 				Destination: &cfg.AccessToken,
 			},
 			&cli.BoolFlag{
-				Name:        "no-color,c",
+				Name:        "no-color",
 				Value:       cfg.NoColor,
 				Usage:       "Disables color output.",
 				Destination: &cfg.NoColor,
@@ -106,6 +106,6 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		fmt.Println(err)
+		slog.Error("error in app", "msg", err.Error())
 	}
 }

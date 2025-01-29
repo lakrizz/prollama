@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/k0kubun/pp"
 
@@ -31,7 +32,6 @@ func GetPullRequests(repo string) ([]byte, error) {
 
 	res, err := execute(args)
 
-	pp.Println(string(res))
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,27 @@ func ghComments(c []*models.Comment) []*models.GithubComment {
 		res[i] = v.GetGitHubCompatible()
 	}
 
-	pp.Println(res)
 	return res
+}
 
+func GetRepositoryName() (string, error) {
+	resp, err := execute([]string{
+		"repo",
+		"view",
+		"--json", "url",
+		"-q", ".url",
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	if !strings.HasPrefix(string(resp), "https://github.com/") {
+		return "", fmt.Errorf("not a github repository")
+	}
+
+	// cut the newline at the end
+	r := string(resp)[:len(resp)-1]
+
+	return strings.TrimPrefix(r, "https://github.com/"), nil
 }
