@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/lmittmann/tint"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 
@@ -60,7 +61,7 @@ func main() {
 			&cli.StringFlag{
 				Name:        "access-token",
 				Value:       "",
-				Usage:       "Access token for Ollama authentication.",
+				Usage:       "Access token for Ollama authentication. (optional)",
 				Destination: &cfg.AccessToken,
 			},
 			&cli.BoolFlag{
@@ -81,6 +82,18 @@ func main() {
 				slog.SetLogLoggerLevel(slog.LevelDebug)
 			}
 
+			// enable colored output
+			if !cfg.NoColor {
+				log.Println("enabling color")
+				// set global logger with custom options
+				slog.SetDefault(slog.New(
+					tint.NewHandler(os.Stderr, &tint.Options{
+						Level:      slog.LevelDebug,
+						TimeFormat: time.Kitchen,
+					}),
+				))
+			}
+
 			// Example task within the errgroup
 			g.Go(func() error {
 				res := make(chan error, 1)
@@ -97,7 +110,7 @@ func main() {
 			})
 
 			if err := g.Wait(); err != nil {
-				return fmt.Errorf("error executing prollama: %w", err)
+				return err
 			}
 
 			return nil
@@ -106,6 +119,6 @@ func main() {
 
 	err := app.Run(os.Args)
 	if err != nil {
-		slog.Error("error in app", "msg", err.Error())
+		slog.Error("cancelling execution", "msg", err.Error())
 	}
 }
