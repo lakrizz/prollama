@@ -4,15 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/jonathanhecl/gollama"
-	"github.com/k0kubun/pp"
 	"github.com/sourcegraph/go-diff/diff"
 
 	"github.com/lakrizz/prollama/pkg/hunks"
@@ -20,7 +17,6 @@ import (
 )
 
 func (o *Ollama) GenerateCommentsForPatch(diffs []*diff.FileDiff) ([]*models.Comment, error) {
-	logFolder := filepath.Join("logs", fmt.Sprintf("%v", time.Now().Unix()))
 	ctx := context.Background()
 
 	res := make([]*models.Comment, 0)
@@ -33,11 +29,11 @@ func (o *Ollama) GenerateCommentsForPatch(diffs []*diff.FileDiff) ([]*models.Com
 			continue
 		}
 
-		log.Println("checking new diff", unidiff.NewName)
+		slog.Info(fmt.Sprintf("file: %v", unidiff.NewName))
 
 		// now check all the hunks
 		for i, hunk := range unidiff.Hunks {
-			log.Println("checking hunk", i+1, "of", len(unidiff.Hunks))
+			slog.Info(fmt.Sprintf("hunk %v of %v", i+1, len(unidiff.Hunks)))
 			output, err := g.Chat(ctx, fmt.Sprintf(o.userPrompt, string(hunk.Body)))
 			if err != nil {
 				return nil, err
@@ -46,12 +42,13 @@ func (o *Ollama) GenerateCommentsForPatch(diffs []*diff.FileDiff) ([]*models.Com
 			cmt := []*models.Comment{}
 			err = json.Unmarshal(removeJSONTag(output.Content), &cmt)
 			if err != nil {
-				log.Println(fmt.Errorf("error unmarshalling ollama response: %w", err))
-				pp.Println(removeJSONTag(output.Content))
-				err = os.WriteFile(filepath.Join(logFolder, fmt.Sprintf("F%vH%v", filepath.Base(unidiff.NewName), i)), []byte(output.Content), 0777)
-				if err != nil {
-					log.Println(err)
+
+				slog.Error("Could not unmarshal ollama response", "error", err.Error())
+
+				if o.cfg.Debug {
+					slog.Debug("raw output of errored llm response", "body", string(removeJSONTag(output.Content)))
 				}
+
 				continue
 			}
 
@@ -66,12 +63,11 @@ func (o *Ollama) GenerateCommentsForPatch(diffs []*diff.FileDiff) ([]*models.Com
 				c.EndLine = int(hunk.NewStartLine) + affectedLineNumber
 			}
 
-			log.Println("adding", len(cmt), "new comments")
+			slog.Info(fmt.Sprintf("found %v comments", len(cmt)))
 			res = append(res, cmt...)
 		}
 	}
 
-	log.Println("found", len(res), "comments for this patch")
 	return res, nil
 }
 

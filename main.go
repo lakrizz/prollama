@@ -21,7 +21,7 @@ func main() {
 		Repo:     "",
 		Endpoint: "http://localhost:11434",
 		Debug:    false,
-		Timeout:  30,
+		Timeout:  120,
 	}
 
 	app := &cli.App{
@@ -69,6 +69,12 @@ func main() {
 				Value:       cfg.NoColor,
 				Usage:       "Disables color output.",
 				Destination: &cfg.NoColor,
+			},
+			&cli.BoolFlag{
+				Name:        "dry",
+				Value:       cfg.Dry,
+				Usage:       "Runs the command dry, does not create comments on PR",
+				Destination: &cfg.Dry,
 			},
 		},
 		Action: func(c *cli.Context) error {

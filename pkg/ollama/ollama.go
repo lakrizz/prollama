@@ -35,7 +35,12 @@ Return all feedback as an array of JSON objects, where each object contains the 
 - 'body': A detailed explanation of the issue and actionable suggestions for improvement.  
 - 'affected_line': a copy of the line this comment belongs to. Include all (this also applies to repeated instances) control characters and the leading '+' or '-'
 
-If no issues are found, return an empty array ('[]').  
+If no issues are found, return an empty array ('[]'). Always return valid JSON. 
+
+Rules for your response:
+- ONLY return valid JSON data in a single line
+- Sanitize and clean the resulting JSON string before returning it
+- Remove all tabs and newlines from the JSON string before returning it
 
 Ignore metadata lines that indicate information for the Diffpatch (e.g., lines that contain four numbers).
 Assume all brackets, quotes, parantheses are closed at some point, so do not mark a missing closing or an unclosed pair as an error. 
