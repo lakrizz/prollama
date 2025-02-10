@@ -3,13 +3,14 @@ package config
 import "context"
 
 type Config struct {
-	Model       string `json:"model"`        // The Ollama model to use.
-	Repo        string `json:"repo"`         // Path to the repository to review.
-	Endpoint    string `json:"endpoint"`     // API endpoint for remote Ollama instance, includes Port.
-	Debug       bool   `json:"debug"`        // Enable debug output.
-	Timeout     int    `json:"timeout"`      // Request timeout in seconds (default: 30).
-	AccessToken string `json:"access_token"` // Access token for Ollama authentication.
-	NoColor     bool   `json:"no_color"`     // Disable color output.
+	Model       string `json:"model,omitempty"`        // The Ollama model to use.
+	Repo        string `json:"repo,omitempty"`         // Path to the repository to review.
+	Endpoint    string `json:"endpoint,omitempty"`     // API endpoint for remote Ollama instance, includes Port.
+	Debug       bool   `json:"debug,omitempty"`        // Enable debug output.
+	Timeout     int    `json:"timeout,omitempty"`      // Request timeout in seconds (default: 30).
+	AccessToken string `json:"access_token,omitempty"` // Access token for Ollama authentication.
+	NoColor     bool   `json:"no_color,omitempty"`     // Disable color output.
+	Dry         bool   `json:"dry,omitempty"`          // Does a dry-run, e.g., skips the creation of new data
 }
 
 type key string
