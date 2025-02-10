@@ -3,7 +3,7 @@ package gh
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -94,7 +94,8 @@ func AddReview(repo string, prNumber int, comments []*models.Comment) error {
 	if err != nil {
 		return err
 	}
-	log.Println("pr submitted")
+
+	slog.Info("created review")
 
 	return nil
 }
@@ -108,11 +109,9 @@ func createInputFile(comments []*models.Comment) string {
 
 	dat, err := json.Marshal(r)
 	if err != nil {
-		log.Panic(err)
+		slog.Error("error marshalling github comments", "message", err.Error())
 		return ""
 	}
-
-	pp.Println("json input file for review creation content:", string(dat))
 
 	f, err := os.CreateTemp("", "comments")
 	if err != nil {
