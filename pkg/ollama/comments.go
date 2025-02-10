@@ -2,17 +2,15 @@ package ollama
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/jonathanhecl/gollama"
+	"github.com/k0kubun/pp"
 	"github.com/sourcegraph/go-diff/diff"
 
-	"github.com/lakrizz/prollama/pkg/hunks"
 	"github.com/lakrizz/prollama/pkg/models"
 )
 
@@ -29,43 +27,24 @@ func (o *Ollama) GenerateCommentsForPatch(diffs []*diff.FileDiff) ([]*models.Com
 			continue
 		}
 
-		slog.Info(fmt.Sprintf("file: %v", unidiff.NewName))
-
 		// now check all the hunks
-		for i, hunk := range unidiff.Hunks {
-			slog.Info(fmt.Sprintf("hunk %v of %v", i+1, len(unidiff.Hunks)))
+		for _, hunk := range unidiff.Hunks {
 			output, err := g.Chat(ctx, fmt.Sprintf(o.userPrompt, string(hunk.Body)))
 			if err != nil {
 				return nil, err
 			}
+
 			// convert to our struct
-			cmt := []*models.Comment{}
-			err = json.Unmarshal(removeJSONTag(output.Content), &cmt)
-			if err != nil {
-
-				slog.Error("Could not unmarshal ollama response", "error", err.Error())
-
-				if o.cfg.Debug {
-					slog.Debug("raw output of errored llm response", "body", string(removeJSONTag(output.Content)))
-				}
-
-				continue
+			cmt := &models.Comment{
+				FileName:  unidiff.NewName[2:],
+				StartLine: int(hunk.NewStartLine),
+				Comment:   output.Content,
 			}
 
-			// now fix all the lines etc
-			for _, c := range cmt {
-				affectedLineNumber := hunks.FindLineNumberInHunk(c.AffectedLine, string(hunk.Body))
-				if affectedLineNumber == -1 {
-					continue
-				}
-
-				c.FileName = unidiff.NewName[2:]
-				c.EndLine = int(hunk.NewStartLine) + affectedLineNumber
-			}
-
-			slog.Info(fmt.Sprintf("found %v comments", len(cmt)))
-			res = append(res, cmt...)
+			pp.Println(cmt)
+			res = append(res, cmt)
 		}
+
 	}
 
 	return res, nil
@@ -91,8 +70,4 @@ func checkFilenameAllowed(filename string) bool {
 	}
 
 	return true
-}
-func removeJSONTag(input string) []byte {
-	j := strings.TrimPrefix(input, "```json")
-	return []byte(strings.TrimSuffix(j, "```"))
 }

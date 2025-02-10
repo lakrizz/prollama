@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"os"
 	"time"
@@ -90,7 +89,6 @@ func main() {
 
 			// enable colored output
 			if !cfg.NoColor {
-				log.Println("enabling color")
 				// set global logger with custom options
 				slog.SetDefault(slog.New(
 					tint.NewHandler(os.Stderr, &tint.Options{
