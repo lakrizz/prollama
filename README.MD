@@ -1,5 +1,7 @@
 # prollama
 
+> This project was DOA, i still keep the source code because maybe someday i'll get back to it, but right now it's not helping my mental state. Feel free to do whatever you want with it.
+
 ## Description
 
 prollama is a zeroconf pull request reviewer for GitHub. It automates the review process by analyzing pull requests and providing feedback.
@@ -16,9 +18,6 @@ You can install prollama using the following command:
 ```bash
 go install github.com/lakrizz/prollama@latest
 ```
-
-## Roadmap
-
 
 ## Contributing
 
