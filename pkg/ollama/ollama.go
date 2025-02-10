@@ -28,19 +28,13 @@ type OllamaOption func(*Ollama) error
 func New(opts ...OllamaOption) (*Ollama, error) {
 	o := &Ollama{
 		userPrompt: `
-	Please review the following unified Diff file. Identify issues such as syntax errors, logical flaws, unhandled errors, code smells, and testing gaps. Suggest improvements, refactoring opportunities, or missing tests where applicable. Inform about State of the Art implementations, Best Practices and Design Patterns. Combine multiple findings for the same line into a single comment. 
+	Please review the following Git Diff Hunk. Identify issues such as syntax errors, logical flaws, unhandled errors, code smells, and testing gaps. Suggest improvements, refactoring opportunities, or missing tests where applicable. Inform about State of the Art implementations, Best Practices and Design Patterns. Combine multiple findings for the same line into a single comment. 
 
-Return all feedback as an array of JSON objects, where each object contains the fields:  
-- 'line': The line number in the changed file, as indicated by the patch metadata.  
-- 'body': A detailed explanation of the issue and actionable suggestions for improvement.  
-- 'affected_line': a copy of the line this comment belongs to. Include all (this also applies to repeated instances) control characters and the leading '+' or '-'
-
-If no issues are found, return an empty array ('[]').  
+Return a string that contains all errors in a summarized manner, highlight the origins of your comments. Use markdown if you want to.
 
 Ignore metadata lines that indicate information for the Diffpatch (e.g., lines that contain four numbers).
-Assume all brackets, quotes, parantheses are closed at some point, so do not mark a missing closing or an unclosed pair as an error. 
 
-This is the patch: %v`,
+This is the hunk: %v`,
 		gollama: gollama.New(""),
 	}
 
